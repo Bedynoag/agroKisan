@@ -7,8 +7,6 @@ from keras.models import load_model
 from PIL import Image
 from flask import Flask, redirect, url_for, request, render_template, jsonify
 from flask import jsonify
-from werkzeug.utils import secure_filename
-from gevent.pywsgi import WSGIServer
 import requests
 from bs4 import BeautifulSoup as bs
 import warnings
