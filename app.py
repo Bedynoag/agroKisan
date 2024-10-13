@@ -2,8 +2,9 @@ import os
 import numpy as np
 import pandas as pd
 import pickle
-import tensorflow as tf
-from tensorflow import keras
+import keras
+from keras.models import load_model
+from PIL import Image
 from flask import Flask, redirect, url_for, request, render_template, jsonify
 from flask import jsonify
 from werkzeug.utils import secure_filename
@@ -13,7 +14,7 @@ from bs4 import BeautifulSoup as bs
 import warnings
 
 app = Flask(__name__, static_folder=r"static")
-model2 = tf.keras.models.load_model("Elastic_net.keras")
+model2 =load_model("Elastic_net.keras")
 data = pd.DataFrame(pd.read_csv("final.csv"))
 model = pickle.load(open(r"RandomForest.pkl", "rb"))
 area = pd.read_csv(r"final_data.csv")
@@ -160,18 +161,32 @@ def about_disease(filtered_df, column):
         f = f + cause + ", "  # Separate multiple causes with a comma
     return f.rstrip(", ")  # Remove trailing comma and spaces
 
+
+
 def load_prep(img_path):
-    img = tf.io.read_file(img_path)
+    # Open the image using PIL
+    img = Image.open(img_path)
 
-    img = tf.image.decode_image(img)
+    # Resize the image to (224, 224)
+    img = img.resize((224, 224))
 
-    img = tf.image.resize(img, size=(224, 224))
+    # Convert the image to a NumPy array and scale pixel values to [0, 1]
+    img_array = np.array(img) / 255.0
 
-    return img
+    # Ensure the image has a channel dimension (add batch size of 1)
+    if img_array.ndim == 2:  # Grayscale image
+        img_array = np.expand_dims(img_array, axis=-1)  # Add channel dimension
+    img_array = np.expand_dims(img_array, axis=0)  # Add batch dimension
 
-def model_predict(img_path, model2):
+    return img_array
+
+
+def model_predict(img_path, model):
+    # Preprocess the image
     image = load_prep(img_path)
-    preds = model2.predict(tf.expand_dims(image, axis=0))
+
+    # Make predictions
+    preds = model.predict(image)
     return preds
 
 @app.route('/disease', methods=['GET'])
