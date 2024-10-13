@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Market</title>
+    <link rel="stylesheet" href="../static/market.css">
+    <link href="https://cdn.jsdelivr.net/npm/remixicon@3.4.0/fonts/remixicon.css" rel="stylesheet">
+</head>
+<body>
+    <div id="load">
+
+    </div>
+    <div id="main">
+        <div id="nav">
+        <a href="{{url_for('index')}} "><h1><img src="https://cdn-icons-png.flaticon.com/512/3377/3377932.png" alt=""> agroKisan </h1></a>
+            <div id="nav-prt2">
+                  <div id="contact_us">
+                      <a href="tel:+916261623713"> <i class="ri-whatsapp-line"></i> </a>
+                      <a href="https://www.instagram.com/_deepak094_/"><i class="ri-instagram-line"></i> </a> 
+                       <a href="https://twitter.com/deepak_094"><i class="ri-twitter-line"></i> </a>
+                      <a href="https://www.linkedin.com/in/deepak-singh-566787172/"><i class="ri-linkedin-box-line"></i> </a> 
+                   </div>
+            </div>
+        </div>
+        <form method="post" action="" accept-charset="UTF-8" name="Modelform">
+        <div id="form">
+            <div id="left">
+                <div id="r1">
+                    <label>State:</label>
+                    <select class="state_name" id="state" name="state1" required  onchange="load_districts(this.value, 'districts')">
+                        {% for state in states %}
+                        <option value="{{ state }}"> {{state}} </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div id="r2">
+                    <label>District:</label>
+                    <select class="state_name" id="districts" name="district1" required onchange="load_markets(this.value, 'markets')">
+                        {% for dist in districts %}
+                        <option value="select"> Select District</option>
+                        {% endfor %}
+                    </select><br>
+                </div>
+                <div id="r3">
+                    <label>Market:</label>
+                    <select class="state_name" name="Market" id="markets" required >
+                        <option value="select"> Select Market</option>
+                    </select>
+            </div>
+                <div id="r4">
+                    <label>Commodities:</label>
+                    <select class="state_name" id="commodity" name="commodity" required >
+                    {% for commodity in commodities %}
+                    <option value="{{ commodity }}">{{ commodity }} </option>
+                    {% endfor %}
+                </select><br>
+                </div>
+
+                
+                <div id="r5">
+                <label> Price/Arrival:</label>
+                <select class="state_name" id="Price/Arrival" name="Price/Arrival" required >
+                    <option selected ="selected"  value="0">Select</option>
+                    <option value="0">Price</option>
+                    <option value="1">Arrival</option>
+                    <option value="2">Both</option>
+               </select> <br>
+               </div>
+               
+               <div id="r6">
+                    <label >Date From:</label> 
+                    <input type="date" name="from" >
+                    
+                    <label >Date To:</label>
+                    <input type="date" name="To" > 
+
+                </div>
+               <div id="button">
+                <button id="btn_predict" onclick="send_data()">GO</button>
+               </div>
+
+               
+            </div> 
+        </div>
+    </form>
+
+        <div id="right">
+            <img id="myImage" src="" alt="Image" height="100%" width="100%">
+            
+        </div> 
+               
+
+    </div>
+    <div id="result">
+        <div class="container">
+            <table id="resultTable" class="table table-bordered table-hover">
+                <thead>
+                    <tr>
+        
+        
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Table body rows will be added dynamically with JavaScript -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+   
+    <script src="../static/Market.js"></script>
+    <script>
+        function load_districts(selectedState, districtsId) {
+            var districtSelect = document.getElementById(districtsId);
+            districtSelect.innerHTML = "";
+    
+            {% for dist in districts %}
+            if ("{{ dist.split('_')[0] }}" === selectedState) {
+                var district = "{{ dist.split('_')[1] }}";
+                var option = document.createElement("option");
+                option.value = district;
+                option.textContent = district;
+                districtSelect.appendChild(option);
+            }
+            {% endfor %}
+    
+            load_markets(districtSelect.value, 'markets');
+        }
+    
+
+    function load_markets(selectedDistrict, marketsId) {
+    var marketSelect = document.getElementById(marketsId);
+    marketSelect.innerHTML = "";
+
+    var selectedState = document.getElementById('state').value;
+
+    {% for market in markets %}
+    var marketData = "{{ market }}";
+    var marketParts = marketData.split('_');
+    var district = marketParts[0] + "_" + marketParts[1];
+    var marketOption = marketParts.slice(2).join('_');
+    if (district === selectedState + "_" + selectedDistrict) {
+        var option = document.createElement("option");
+        option.value = marketOption;
+        option.textContent = marketOption;
+        marketSelect.appendChild(option);
+    }
+    {% endfor %}
+}
+
+
+
+function form_handler(event) {
+        event.preventDefault(); // Don't submit the form normally
+    }
+    function send_data() {
+        document.querySelector('form').addEventListener("submit", form_handler);
+
+        var fd = new FormData(document.querySelector('form'));
+
+        var xhr = new XMLHttpRequest({ mozSystem: true });
+
+        xhr.open('POST', '/price', true);
+        document.getElementById('btn_predict').innerHTML = "Go";
+        xhr.onreadystatechange = function () {
+            if (xhr.readyState == XMLHttpRequest.DONE) {
+                var tableData = JSON.parse(xhr.responseText);
+                displayTable(tableData);
+            }
+        };
+
+        xhr.onload = function () { };
+
+        xhr.send(fd);
+    }
+
+    function displayTable(data) {
+        var tableBody = document.getElementById('resultTable').getElementsByTagName('tbody')[0];
+        tableBody.innerHTML = ''; // Clear existing rows before updating
+
+        if (data.length === 0) {
+            var newRow = tableBody.insertRow(tableBody.rows.length);
+            var emptyCell = newRow.insertCell(0);
+            emptyCell.colSpan = 100; // Adjust the value based on the number of columns you want to span
+            emptyCell.innerHTML = "No data available.";
+        } else {
+            if (data[0]["Sl no."] === "1") {
+                // Case: Trend value is 0
+                var headerRow = tableBody.insertRow(tableBody.rows.length);
+                Object.keys(data[0]).forEach(function (column) {
+                    var headerCell = document.createElement('th');
+                    headerCell.textContent = column;
+                    headerRow.appendChild(headerCell);
+                });
+
+                data.forEach(function (row) {
+                    var newRow = tableBody.insertRow(tableBody.rows.length);
+                    Object.keys(row).forEach(function (column) {
+                        var cell = newRow.insertCell(newRow.cells.length);
+                        cell.textContent = row[column];
+                    });
+                });
+            } else if (data[0]["State Name"] === "Uttar Pradesh") {
+                // Case: Trend value is 2
+                var headerRow = tableBody.insertRow(tableBody.rows.length);
+                Object.keys(data[0]).forEach(function (column) {
+                    var headerCell = document.createElement('th');
+                    headerCell.textContent = column;
+                    headerRow.appendChild(headerCell);
+                });
+
+                var stateRow = tableBody.insertRow(tableBody.rows.length);
+                stateRow.insertCell(0).textContent = "-";
+                stateRow.insertCell(1).textContent = "-";
+                stateRow.insertCell(2).textContent = "-";
+                stateRow.insertCell(3).textContent = "Uttar Pradesh";
+
+                data.forEach(function (row) {
+                    var newRow = tableBody.insertRow(tableBody.rows.length);
+                    Object.keys(row).forEach(function (column) {
+                        var cell = newRow.insertCell(newRow.cells.length);
+                        cell.textContent = row[column];
+                    });
+                });
+
+                var groupTotalRow = tableBody.insertRow(tableBody.rows.length);
+                groupTotalRow.className = "group-total";
+                groupTotalRow.insertCell(0).colSpan = 4; // Adjust the value based on the number of columns you want to span
+                groupTotalRow.insertCell(1).textContent = "-";
+                groupTotalRow.insertCell(2).textContent = "-";
+                groupTotalRow.insertCell(5).textContent = "Sub Total";
+                groupTotalRow.insertCell(6).textContent = data.reduce(function (acc, row) { return acc + parseFloat(row["Arrivals (Tonnes)"].replace(',', '')); }, 0).toLocaleString();
+                groupTotalRow.insertCell(7).textContent = "-";
+                groupTotalRow.insertCell(8).textContent = "-";
+                groupTotalRow.insertCell(9).textContent = "-";
+            } else {
+                // Default case (when neither trend value is 0 nor 2)
+                var headerRow = tableBody.insertRow(tableBody.rows.length);
+                Object.keys(data[0]).forEach(function (column) {
+                    var headerCell = document.createElement('th');
+                    headerCell.textContent = column;
+                    headerRow.appendChild(headerCell);
+                });
+
+                data.forEach(function (row) {
+                    var newRow = tableBody.insertRow(tableBody.rows.length);
+                    Object.keys(row).forEach(function (column) {
+                        var cell = newRow.insertCell(newRow.cells.length);
+                        cell.textContent = row[column];
+                    });
+                });
+            }
+        }
+    }
+    </script>
+</body>
+</html>

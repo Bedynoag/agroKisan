@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>agroKisan</title>
+    <link rel="shortcut icon" href="https://cdn-icons-png.flaticon.com/512/3377/3377932.png" type="image/x-icon">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/3.7.0/animate.min.css">
+    <link rel="stylesheet" href="../static/styles.css">
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/remixicon@3.4.0/fonts/remixicon.css" rel="stylesheet">
+</head>
+
+<body>
+    <div id="nav">
+        <a href="{{url_for('index')}} "><h1><img src="https://cdn-icons-png.flaticon.com/512/3377/3377932.png" alt=""> agroKisan </h1></a>
+        <div id="nav-prt2">
+           <a href="#features"> <h4>Features</h4> </a> 
+            <!-- <h4>My Values</h4> -->
+           <a href="#page2-in"><h4>About us</h4></a> 
+            <button>
+                Contact
+                <div id="btn-in"></div>
+            </button>
+        </div>
+    </div>
+
+    <div id="main">
+        <div id="page1">
+            <h1>agro </h1>
+            <h1>Kisan</h1>
+            <img id="gola" src="https://cdn-icons-png.flaticon.com/512/3377/3377932.png" alt="">
+            <div id="platform">
+                <h1>"Cultivating Success <br> opportunity to problem, <br> Harvesting Prosperity"</h1>
+            </div>
+        </div>
+        <div id="page2">
+            <div id="page2-in">
+                <h1>What is <span>agroKisan.</span></h1>
+                <div id="page2-content">
+                    <h1>Always here to help</h1>
+                    <p>Agrokishan is your trusted partner in agriculture, providing a comprehensive platform that combines advanced technology with agricultural expertise. Our mission is to revolutionize farming practices and enhance crop productivity. <br> <br>
+                    </p>
+                </div>
+            </div>
+            <div id="features">
+                <div id="feature" >
+                    <a href="{{url_for('predictor')}} "> <h4>Crop Recomendation</h4> </a>
+                   <a href="{{url_for('disease')}}">   <h4>Disease Prediction</h4> </a>
+                    <a href="{{url_for('market')}}"> <h4>Market Prices</h4> </a>
+                    <a href="{{url_for('rainfall')}}"><h4>Rainfall</h4></a>
+                    <!-- <h4>Rainfall</h4> -->
+                </div>
+            </div>
+                
+
+            <div id="contact_us">
+               <a href="tel:+916261623713"> <i class="ri-whatsapp-line"></i> </a>
+               <a href="https://www.instagram.com/_deepak094_/"><i class="ri-instagram-line"></i> </a> 
+                <a href="https://twitter.com/deepak_094"><i class="ri-twitter-line"></i> </a>
+               <a href="https://www.linkedin.com/in/deepak-singh-566787172/"><i class="ri-linkedin-box-line"></i> </a> 
+            </div>
+            <div id="credit">
+                <h3>Made by Deepak and Naresh</h3>
+            </div>
+        </div>
+    </div>
+
+    
+    <script src="https://code.jquery.com/jquery-3.7.0.js"
+        integrity="sha256-JlqSTELeR4TLqP0OG9dxM7yDPqX1ox/HfgiSLBj8+kM=" crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/lettering.js/0.6.1/jquery.lettering.min.js"
+        integrity="sha512-VJ/iYbiu1eJ6yLimfTi65t2R9TFcG5D9X8ZCfbbEFhTfPnKJh8byoKXEawi5ScJZBYL1eiirL1+MczZDx0Tz9Q=="
+        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <script src="https://cdn.jsdelivr.net/npm/textillate@0.4.1/jquery.textillate.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.1/gsap.min.js"
+        integrity="sha512-qF6akR/fsZAB4Co1QDDnUXWnaQseLGXoniuSuSlPQK6+aWhlMZcHzkasCSlnWoe+TJuudlka1/IQ01Dnhgq95g=="
+        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.1/ScrollTrigger.min.js"
+        integrity="sha512-IHDCHrefnBT3vOCsvdkMvJF/MCPz/nBauQLzJkupa4Gn4tYg5a6VGyzIrjo6QAUy3We5HFOZUlkUpP0dkgE60A=="
+        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+        <script src="../static/script.js"></script>
+</body>
+
+</html>
