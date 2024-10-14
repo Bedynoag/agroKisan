@@ -286,9 +286,10 @@ def about_disease(filtered_df, column):
 
 
 transform = transforms.Compose([
-    transforms.Resize((256, 256)),  # Resize the image to the input size of the model
-    transforms.ToTensor(),  # Convert image to tensor
-    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])  # Normalize as per the model's requirements
+    transforms.Resize((256, 256)),  # Resize the image to fit model input size
+    transforms.ToTensor(),  # Convert image to a PyTorch tensor
+    # Uncomment the normalization below if you know the values used during training
+    # transforms.Normalize(mean=[your_mean_values], std=[your_std_values]),
 ])
 
 def predict_image(img, model):
