@@ -13,6 +13,7 @@ from torchvision import transforms
 import warnings
 from werkzeug.utils import secure_filename
 import torch.nn.functional as F
+from io import BytesIO
 
 app = Flask(__name__, static_folder=r"static")
 
@@ -309,13 +310,9 @@ def disease():
 def upload():
     if request.method == 'POST':
         f = request.files['file']
-        # Save the file to ./uploads
-        basepath = os.path.dirname(__file__)
-        file_path = os.path.join(basepath, 'uploads', secure_filename(f.filename))
-        f.save(file_path)
-
-        # Open the image file
-        img = Image.open(file_path)
+        
+        # Open the image file directly in memory using BytesIO
+        img = Image.open(BytesIO(f.read()))
         
         # Apply transformations
         img = transform(img)
