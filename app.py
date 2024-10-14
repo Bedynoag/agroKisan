@@ -95,7 +95,7 @@ class CNN_NeuralNet(ImageClassificationBase):
         return out   
     
 loaded_model = CNN_NeuralNet(3, 38)
-loaded_model.load_state_dict(torch.load('best_model.pth', map_location=device))  # Use the device directly
+loaded_model.load_state_dict(torch.load('best_model.pth', map_location=device, weights_only=True))
 loaded_model = to_device(loaded_model, device)  # Move model to the appropriate device
 loaded_model.eval()
 
