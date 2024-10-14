@@ -32,72 +32,12 @@ def to_device(data, device):
         return [to_device(x, device) for x in data]
     return data.to(device, non_blocking=True)
 
-def ConvBlock(in_channels, out_channels, pool=False):
-    layers = [nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1),
-             nn.BatchNorm2d(out_channels),
-             nn.ReLU(inplace=True)]
-    if pool:
-        layers.append(nn.MaxPool2d(4))
-    return nn.Sequential(*layers)
 
-# for calculating the accuracy
-def accuracy(outputs, labels):
-    _, preds = torch.max(outputs, dim=1)
-    return torch.tensor(torch.sum(preds == labels).item() / len(preds))
-class ImageClassificationBase(nn.Module):
-    
-    def training_step(self, batch):
-        images, labels = batch 
-        out = self(images)                  # Generate predictions
-        loss = F.cross_entropy(out, labels) # Calculate loss
-        return loss
-    
-    def validation_step(self, batch):
-        images, labels = batch 
-        out = self(images)                    # Generate predictions
-        loss = F.cross_entropy(out, labels)   # Calculate loss
-        acc = accuracy(out, labels)           # Calculate accuracy
-        return {'val_loss': loss.detach(), 'val_acc': acc}
-        
-    def validation_epoch_end(self, outputs):
-        batch_losses = [x['val_loss'] for x in outputs]
-        epoch_loss = torch.stack(batch_losses).mean()   # Combine losses
-        batch_accs = [x['val_acc'] for x in outputs]
-        epoch_acc = torch.stack(batch_accs).mean()      # Combine accuracies
-        return {'val_loss': epoch_loss.item(), 'val_acc': epoch_acc.item()}
-    
-    def epoch_end(self, epoch, result):
-        print("Epoch [{}], train_loss: {:.4f}, val_loss: {:.4f}, val_acc: {:.4f}".format(
-            epoch, result['train_loss'], result['val_loss'], result['val_acc']))
-class CNN_NeuralNet(ImageClassificationBase):
-    def __init__(self, in_channels, num_diseases):
-        super().__init__()
-        
-        self.conv1 = ConvBlock(in_channels, 64)
-        self.conv2 = ConvBlock(64, 128, pool=True) 
-        self.res1 = nn.Sequential(ConvBlock(128, 128), ConvBlock(128, 128))
-        
-        self.conv3 = ConvBlock(128, 256, pool=True) 
-        self.conv4 = ConvBlock(256, 512, pool=True)        
-        self.res2 = nn.Sequential(ConvBlock(512, 512), ConvBlock(512, 512))
-        self.classifier = nn.Sequential(nn.MaxPool2d(4),
-                                       nn.Flatten(),
-                                       nn.Linear(512, num_diseases))
-        
-    def forward(self, x): # x is the loaded batch
-        out = self.conv1(x)
-        out = self.conv2(out)
-        out = self.res1(out) + out
-        out = self.conv3(out)
-        out = self.conv4(out)
-        out = self.res2(out) + out
-        out = self.classifier(out)
-        return out   
-    
-loaded_model = CNN_NeuralNet(3, 38)
-loaded_model.load_state_dict(torch.load('best_model.pth', map_location=device, weights_only=True))
-loaded_model = to_device(loaded_model, device)  # Move model to the appropriate device
+loaded_model = torch.jit.load('scripted_model.pt')
+loaded_model = to_device(loaded_model, device)  # Move to device
 loaded_model.eval()
+
+
 
 # Load other necessary data
 data = pd.DataFrame(pd.read_csv("final.csv"))
@@ -293,12 +233,12 @@ transform = transforms.Compose([
 ])
 
 def predict_image(img, model):
-    xb = to_device(img.unsqueeze(0), device)
-    yb = model(xb)
-    # Print the model's output (probabilities or logits)
-    print("Model output:", yb)
-    _, preds = torch.max(yb, dim=1)
-    print("Predicted class index:", preds[0].item())
+    with torch.no_grad():  # Disable gradient calculation
+        xb = to_device(img.unsqueeze(0), device)
+        yb = model(xb)
+        print("Model output:", yb)
+        _, preds = torch.max(yb, dim=1)
+        print("Predicted class index:", preds[0].item())
     return disease_classes[preds[0].item()]
 
 
