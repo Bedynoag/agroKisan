@@ -2,17 +2,103 @@ import os
 import numpy as np
 import pandas as pd
 import pickle
-import keras
-from keras.models import load_model
-from PIL import Image
+import torch
+import torch.nn as nn
 from flask import Flask, redirect, url_for, request, render_template, jsonify
 from flask import jsonify
 import requests
 from bs4 import BeautifulSoup as bs
+from PIL import Image
+from torchvision import transforms
 import warnings
+from werkzeug.utils import secure_filename
+import torch.nn.functional as F
 
 app = Flask(__name__, static_folder=r"static")
-model2 =load_model("Elastic_net.keras")
+
+def get_default_device():
+    """Pick GPU if available, else CPU"""
+    if torch.cuda.is_available():
+        return torch.device("cuda")
+    else:
+        return torch.device("cpu")
+
+device = get_default_device()
+
+def to_device(data, device):
+    """Move tensor(s) or model to chosen device (GPU/CPU)"""
+    if isinstance(data, (list, tuple)):
+        return [to_device(x, device) for x in data]
+    return data.to(device, non_blocking=True)
+
+def ConvBlock(in_channels, out_channels, pool=False):
+    layers = [nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1),
+             nn.BatchNorm2d(out_channels),
+             nn.ReLU(inplace=True)]
+    if pool:
+        layers.append(nn.MaxPool2d(4))
+    return nn.Sequential(*layers)
+
+# for calculating the accuracy
+def accuracy(outputs, labels):
+    _, preds = torch.max(outputs, dim=1)
+    return torch.tensor(torch.sum(preds == labels).item() / len(preds))
+class ImageClassificationBase(nn.Module):
+    
+    def training_step(self, batch):
+        images, labels = batch 
+        out = self(images)                  # Generate predictions
+        loss = F.cross_entropy(out, labels) # Calculate loss
+        return loss
+    
+    def validation_step(self, batch):
+        images, labels = batch 
+        out = self(images)                    # Generate predictions
+        loss = F.cross_entropy(out, labels)   # Calculate loss
+        acc = accuracy(out, labels)           # Calculate accuracy
+        return {'val_loss': loss.detach(), 'val_acc': acc}
+        
+    def validation_epoch_end(self, outputs):
+        batch_losses = [x['val_loss'] for x in outputs]
+        epoch_loss = torch.stack(batch_losses).mean()   # Combine losses
+        batch_accs = [x['val_acc'] for x in outputs]
+        epoch_acc = torch.stack(batch_accs).mean()      # Combine accuracies
+        return {'val_loss': epoch_loss.item(), 'val_acc': epoch_acc.item()}
+    
+    def epoch_end(self, epoch, result):
+        print("Epoch [{}], train_loss: {:.4f}, val_loss: {:.4f}, val_acc: {:.4f}".format(
+            epoch, result['train_loss'], result['val_loss'], result['val_acc']))
+class CNN_NeuralNet(ImageClassificationBase):
+    def __init__(self, in_channels, num_diseases):
+        super().__init__()
+        
+        self.conv1 = ConvBlock(in_channels, 64)
+        self.conv2 = ConvBlock(64, 128, pool=True) 
+        self.res1 = nn.Sequential(ConvBlock(128, 128), ConvBlock(128, 128))
+        
+        self.conv3 = ConvBlock(128, 256, pool=True) 
+        self.conv4 = ConvBlock(256, 512, pool=True)        
+        self.res2 = nn.Sequential(ConvBlock(512, 512), ConvBlock(512, 512))
+        self.classifier = nn.Sequential(nn.MaxPool2d(4),
+                                       nn.Flatten(),
+                                       nn.Linear(512, num_diseases))
+        
+    def forward(self, x): # x is the loaded batch
+        out = self.conv1(x)
+        out = self.conv2(out)
+        out = self.res1(out) + out
+        out = self.conv3(out)
+        out = self.conv4(out)
+        out = self.res2(out) + out
+        out = self.classifier(out)
+        return out   
+    
+loaded_model = CNN_NeuralNet(3, 38)
+loaded_model.load_state_dict(torch.load('best_model.pth', map_location=device))  # Use the device directly
+loaded_model = to_device(loaded_model, device)  # Move model to the appropriate device
+loaded_model.eval()
+
+# Load other necessary data
 data = pd.DataFrame(pd.read_csv("final.csv"))
 model = pickle.load(open(r"RandomForest.pkl", "rb"))
 area = pd.read_csv(r"final_data.csv")
@@ -138,6 +224,47 @@ def price():
 
     return jsonify(table_data)
 
+
+disease_classes = ['Apple___Apple_scab',
+ 'Apple___Black_rot',
+ 'Apple___Cedar_apple_rust',
+ 'Apple___healthy',
+ 'Blueberry___healthy',
+ 'Cherry_(including_sour)___Powdery_mildew',
+ 'Cherry_(including_sour)___healthy',
+ 'Corn_(maize)___Cercospora_leaf_spot Gray_leaf_spot',
+ 'Corn_(maize)___Common_rust_',
+ 'Corn_(maize)___Northern_Leaf_Blight',
+ 'Corn_(maize)___healthy',
+ 'Grape___Black_rot',
+ 'Grape___Esca_(Black_Measles)',
+ 'Grape___Leaf_blight_(Isariopsis_Leaf_Spot)',
+ 'Grape___healthy',
+ 'Orange___Haunglongbing_(Citrus_greening)',
+ 'Peach___Bacterial_spot',
+ 'Peach___healthy',
+ 'Pepper,_bell___Bacterial_spot',
+ 'Pepper,_bell___healthy',
+ 'Potato___Early_blight',
+ 'Potato___Late_blight',
+ 'Potato___healthy',
+ 'Raspberry___healthy',
+ 'Soybean___healthy',
+ 'Squash___Powdery_mildew',
+ 'Strawberry___Leaf_scorch',
+ 'Strawberry___healthy',
+ 'Tomato___Bacterial_spot',
+ 'Tomato___Early_blight',
+ 'Tomato___Late_blight',
+ 'Tomato___Leaf_Mold',
+ 'Tomato___Septoria_leaf_spot',
+ 'Tomato___Spider_mites Two-spotted_spider_mite',
+ 'Tomato___Target_Spot',
+ 'Tomato___Tomato_Yellow_Leaf_Curl_Virus',
+ 'Tomato___Tomato_mosaic_virus',
+ 'Tomato___healthy']
+
+
 @app.route('/predict', methods=['POST'])
 def predict():
     pH = float(request.form.get('ph'))
@@ -153,111 +280,58 @@ def predict():
 
 def about_disease(filtered_df, column):
     cause_values = filtered_df[column]
-
-    f = ""
-    for cause in cause_values:
-        f = f + cause + ", "  # Separate multiple causes with a comma
-    return f.rstrip(", ")  # Remove trailing comma and spaces
+    f = ", ".join(cause_values)
+    return f.rstrip(", ") # Remove trailing comma and spaces
 
 
+transform = transforms.Compose([
+    transforms.Resize((256, 256)),  # Resize the image to the input size of the model
+    transforms.ToTensor(),  # Convert image to tensor
+    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])  # Normalize as per the model's requirements
+])
 
-def load_prep(img_path):
-    # Open the image using PIL
-    img = Image.open(img_path)
+def predict_image(img, model):
+    xb = to_device(img.unsqueeze(0), device)
+    yb = model(xb)
+    # Print the model's output (probabilities or logits)
+    print("Model output:", yb)
+    _, preds = torch.max(yb, dim=1)
+    print("Predicted class index:", preds[0].item())
+    return disease_classes[preds[0].item()]
 
-    # Resize the image to (224, 224)
-    img = img.resize((224, 224))
-
-    # Convert the image to a NumPy array and scale pixel values to [0, 1]
-    img_array = np.array(img) / 255.0
-
-    # Ensure the image has a channel dimension (add batch size of 1)
-    if img_array.ndim == 2:  # Grayscale image
-        img_array = np.expand_dims(img_array, axis=-1)  # Add channel dimension
-    img_array = np.expand_dims(img_array, axis=0)  # Add batch dimension
-
-    return img_array
-
-
-def model_predict(img_path, model):
-    # Preprocess the image
-    image = load_prep(img_path)
-
-    # Make predictions
-    preds = model.predict(image)
-    return preds
 
 @app.route('/disease', methods=['GET'])
 def disease():
     # Main page
     return render_template('disease.html')
 
-@app.route('/disease_pred', methods=['GET', 'POST'])
+@app.route('/disease_pred', methods=['POST'])
 def upload():
     if request.method == 'POST':
-        # Get the file from post request
         f = request.files['file']
-
         # Save the file to ./uploads
         basepath = os.path.dirname(__file__)
-        file_path = os.path.join(
-            basepath, 'uploads', secure_filename(f.filename))
+        file_path = os.path.join(basepath, 'uploads', secure_filename(f.filename))
         f.save(file_path)
 
+        # Open the image file
+        img = Image.open(file_path)
+        
+        # Apply transformations
+        img = transform(img)
+        
         # Make prediction
-        preds = model_predict(file_path, model2)
-        print(preds)
+        preds = predict_image(img, loaded_model)
 
-        # x = x.reshape([64, 64]);
-        disease_class = ['Apple___Apple_scab',
-                         'Apple___Black_rot',
-                         'Apple___Cedar_apple_rust',
-                         'Apple___healthy',
-                         'Blueberry___healthy',
-                         'Cherry_(including_sour)___Powdery_mildew',
-                         'Cherry_(including_sour)___healthy',
-                         'Corn_(maize)___Cercospora_leaf_spot Gray_leaf_spot',
-                         'Corn_(maize)___Common_rust_',
-                         'Corn_(maize)___Northern_Leaf_Blight',
-                         'Corn_(maize)___healthy',
-                         'Grape___Black_rot',
-                         'Grape___Esca_(Black_Measles)',
-                         'Grape___Leaf_blight_(Isariopsis_Leaf_Spot)',
-                         'Grape___healthy',
-                         'Orange___Haunglongbing_(Citrus_greening)',
-                         'Peach___Bacterial_spot',
-                         'Peach___healthy',
-                         'Pepper,_bell___Bacterial_spot',
-                         'Pepper,_bell___healthy',
-                         'Potato___Early_blight',
-                         'Potato___Late_blight',
-                         'Potato___healthy',
-                         'Raspberry___healthy',
-                         'Soybean___healthy',
-                         'Squash___Powdery_mildew',
-                         'Strawberry___Leaf_scorch',
-                         'Strawberry___healthy',
-                         'Tomato___Bacterial_spot',
-                         'Tomato___Early_blight',
-                         'Tomato___Late_blight',
-                         'Tomato___Leaf_Mold',
-                         'Tomato___Septoria_leaf_spot',
-                         'Tomato___Spider_mites Two-spotted_spider_mite',
-                         'Tomato___Target_Spot',
-                         'Tomato___Tomato_Yellow_Leaf_Curl_Virus',
-                         'Tomato___Tomato_mosaic_virus',
-                         'Tomato___healthy']
-
-        result = disease_class[preds.argmax()]
-
-        filtered_df = data[data['Type'] == result]
+        # Assuming that the output is a tensor of probabilities
+        filtered_df = data[data['Type'] == preds]
 
         symptoms = about_disease(filtered_df, 'Symptoms')
         cause = about_disease(filtered_df, 'Cause')
         prevention = about_disease(filtered_df, 'Prevention')
 
         response = {
-            'disease': result,
+            'disease': preds,
             'cause': cause,
             'symptoms': symptoms,
             'prevention': prevention
