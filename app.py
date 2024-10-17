@@ -232,7 +232,7 @@ def upload():
         prevention = about_disease(filtered_df, 'Prevention')
 
         response = {
-            'disease': "Apple "+predicted_labels_str[0],
+            'disease': predicted_labels_str[0],
             'cause': cause,
             'symptoms': symptoms,
             'prevention': prevention
