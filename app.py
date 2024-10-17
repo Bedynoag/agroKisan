@@ -8,9 +8,10 @@ import requests
 from bs4 import BeautifulSoup as bs
 from PIL import Image
 from io import BytesIO
+import albumentations as A
 from albumentations.pytorch import ToTensorV2
 from efficientnet_pytorch import model as enet
-import albumentations as A
+
 
 
 app = Flask(__name__, static_folder=r"static")
