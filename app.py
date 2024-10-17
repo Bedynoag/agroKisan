@@ -25,6 +25,13 @@ device = get_default_device()
 loaded_model = enet.EfficientNet.from_name('efficientnet-b0', num_classes=6)
 loaded_model.load_state_dict(torch.load('checking.pth', map_location=device))
 loaded_model.to(device)
+loaded_model = enet.EfficientNet.from_name('efficientnet-b0', num_classes=6)
+loaded_model.load_state_dict(torch.load('checking.pth', map_location=device))
+loaded_model.to(device)
+
+# Apply dynamic quantization
+loaded_model = torch.quantization.quantize_dynamic(loaded_model, {torch.nn.Linear}, dtype=torch.qint8)
+
 loaded_model.eval()
 
 
