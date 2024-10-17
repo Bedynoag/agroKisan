@@ -1,40 +1,29 @@
-import os
 import numpy as np
 import pandas as pd
 import pickle
 import torch
-import torch.nn as nn
 from flask import Flask, redirect, url_for, request, render_template, jsonify
 from flask import jsonify
 import requests
 from bs4 import BeautifulSoup as bs
 from PIL import Image
-from torchvision import transforms
-import warnings
-from werkzeug.utils import secure_filename
-import torch.nn.functional as F
 from io import BytesIO
+from albumentations.pytorch import ToTensorV2
+from efficientnet_pytorch import model as enet
+import albumentations as A
+
 
 app = Flask(__name__, static_folder=r"static")
 
 def get_default_device():
     """Pick GPU if available, else CPU"""
-    if torch.cuda.is_available():
-        return torch.device("cuda")
-    else:
-        return torch.device("cpu")
+    return torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 device = get_default_device()
 
-def to_device(data, device):
-    """Move tensor(s) or model to chosen device (GPU/CPU)"""
-    if isinstance(data, (list, tuple)):
-        return [to_device(x, device) for x in data]
-    return data.to(device, non_blocking=True)
-
-
-loaded_model = torch.jit.load('scripted_model.pt')
-loaded_model = to_device(loaded_model, device)  # Move to device
+loaded_model = enet.EfficientNet.from_name('efficientnet-b0', num_classes=6)
+loaded_model.load_state_dict(torch.load('checking.pth', map_location=device))
+loaded_model.to(device)
 loaded_model.eval()
 
 
@@ -166,45 +155,14 @@ def price():
     return jsonify(table_data)
 
 
-disease_classes = ['Apple___Apple_scab',
- 'Apple___Black_rot',
- 'Apple___Cedar_apple_rust',
- 'Apple___healthy',
- 'Blueberry___healthy',
- 'Cherry_(including_sour)___Powdery_mildew',
- 'Cherry_(including_sour)___healthy',
- 'Corn_(maize)___Cercospora_leaf_spot Gray_leaf_spot',
- 'Corn_(maize)___Common_rust_',
- 'Corn_(maize)___Northern_Leaf_Blight',
- 'Corn_(maize)___healthy',
- 'Grape___Black_rot',
- 'Grape___Esca_(Black_Measles)',
- 'Grape___Leaf_blight_(Isariopsis_Leaf_Spot)',
- 'Grape___healthy',
- 'Orange___Haunglongbing_(Citrus_greening)',
- 'Peach___Bacterial_spot',
- 'Peach___healthy',
- 'Pepper,_bell___Bacterial_spot',
- 'Pepper,_bell___healthy',
- 'Potato___Early_blight',
- 'Potato___Late_blight',
- 'Potato___healthy',
- 'Raspberry___healthy',
- 'Soybean___healthy',
- 'Squash___Powdery_mildew',
- 'Strawberry___Leaf_scorch',
- 'Strawberry___healthy',
- 'Tomato___Bacterial_spot',
- 'Tomato___Early_blight',
- 'Tomato___Late_blight',
- 'Tomato___Leaf_Mold',
- 'Tomato___Septoria_leaf_spot',
- 'Tomato___Spider_mites Two-spotted_spider_mite',
- 'Tomato___Target_Spot',
- 'Tomato___Tomato_Yellow_Leaf_Curl_Virus',
- 'Tomato___Tomato_mosaic_virus',
- 'Tomato___healthy']
-
+label_dic = {
+    0: 'healthy', 
+    1: 'scab',
+    2: 'rust',
+    3: 'frog_eye_leaf_spot',
+    4: 'complex', 
+    5: 'powdery_mildew'
+}
 
 @app.route('/predict', methods=['POST'])
 def predict():
@@ -225,21 +183,20 @@ def about_disease(filtered_df, column):
     return f.rstrip(", ") # Remove trailing comma and spaces
 
 
-transform = transforms.Compose([
-    transforms.Resize((256, 256)),  # Resize the image to fit model input size
-    transforms.ToTensor(),  # Convert image to a PyTorch tensor
-    # Uncomment the normalization below if you know the values used during training
-    # transforms.Normalize(mean=[your_mean_values], std=[your_std_values]),
-])
+def transform_valid():
+    augmentation_pipeline = A.Compose(
+        [
+            A.SmallestMaxSize(224),
+            A.CenterCrop(224, 224),
+            A.Normalize(
+                mean=[0.485, 0.456, 0.406],
+                std=[0.229, 0.224, 0.225]
+            ),
+            ToTensorV2()
+        ]
+    )
+    return lambda img: augmentation_pipeline(image=np.array(img))['image']
 
-def predict_image(img, model):
-    with torch.no_grad():  # Disable gradient calculation
-        xb = to_device(img.unsqueeze(0), device)
-        yb = model(xb)
-        print("Model output:", yb)
-        _, preds = torch.max(yb, dim=1)
-        print("Predicted class index:", preds[0].item())
-    return disease_classes[preds[0].item()]
 
 
 @app.route('/disease', methods=['GET'])
@@ -254,22 +211,28 @@ def upload():
         
         # Open the image file directly in memory using BytesIO
         img = Image.open(BytesIO(f.read()))
-        
-        # Apply transformations
-        img = transform(img)
-        
-        # Make prediction
-        preds = predict_image(img, loaded_model)
 
-        # Assuming that the output is a tensor of probabilities
-        filtered_df = data[data['Type'] == preds]
+        # Apply transformations
+        img = transform_valid()(img).unsqueeze(0)  # Add batch dimension
+        img = img.to(device)
+
+        # Make prediction
+        with torch.no_grad():  # Disable gradient calculation
+            output = loaded_model(img)
+            predicted_indices = torch.argmax(output, dim=1)
+
+        # Convert predicted numerical labels to string labels
+        predicted_labels_str = [label_dic[label.item()] for label in predicted_indices]
+
+        # Assuming you have a DataFrame named 'data' with relevant information
+        filtered_df = data[data['Type'] == predicted_labels_str[0]]
 
         symptoms = about_disease(filtered_df, 'Symptoms')
         cause = about_disease(filtered_df, 'Cause')
         prevention = about_disease(filtered_df, 'Prevention')
 
         response = {
-            'disease': preds,
+            'disease': "Apple "+predicted_labels_str[0],
             'cause': cause,
             'symptoms': symptoms,
             'prevention': prevention
