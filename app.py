@@ -11,7 +11,9 @@ from io import BytesIO
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
 from efficientnet_pytorch import model as enet
-
+import torch
+from efficientnet_pytorch import model as enet
+from torch import nn
 
 
 app = Flask(__name__, static_folder=r"static")
@@ -22,18 +24,16 @@ def get_default_device():
 
 device = get_default_device()
 
-loaded_model = enet.EfficientNet.from_name('efficientnet-b0', num_classes=6)
-loaded_model.load_state_dict(torch.load('checking.pth', map_location=device))
-loaded_model.to(device)
-loaded_model = enet.EfficientNet.from_name('efficientnet-b0', num_classes=6)
-loaded_model.load_state_dict(torch.load('checking.pth', map_location=device))
-loaded_model.to(device)
-
-# Apply dynamic quantization
-loaded_model = torch.quantization.quantize_dynamic(loaded_model, {torch.nn.Linear}, dtype=torch.qint8)
-
-loaded_model.eval()
-
+def load_model():
+    """Load and quantize the model dynamically for efficient memory usage."""
+    model = enet.EfficientNet.from_name('efficientnet-b0', num_classes=6)
+    # Load weights into the model
+    model.load_state_dict(torch.load('checking.pth', map_location=device))
+    # Apply dynamic quantization to reduce memory usage during inference
+    model = torch.quantization.quantize_dynamic(model, {nn.Linear}, dtype=torch.qint8)
+    model.to(device)
+    model.eval()  # Set the model to evaluation mode
+    return model
 
 
 # Load other necessary data
@@ -220,13 +220,16 @@ def upload():
         # Open the image file directly in memory using BytesIO
         img = Image.open(BytesIO(f.read()))
 
-        # Apply transformations
+        # Apply transformations (resize, crop, normalize)
         img = transform_valid()(img).unsqueeze(0)  # Add batch dimension
         img = img.to(device)
 
-        # Make prediction
+        # Load model dynamically for the prediction request
+        model = load_model()
+
+        # Make prediction with the loaded and quantized model
         with torch.no_grad():  # Disable gradient calculation
-            output = loaded_model(img)
+            output = model(img)
             predicted_indices = torch.argmax(output, dim=1)
 
         # Convert predicted numerical labels to string labels
@@ -246,7 +249,12 @@ def upload():
             'prevention': prevention
         }
 
+        # Clear model from memory after inference
+        del model
+        torch.cuda.empty_cache()  # Optional: Clear GPU cache if using GPU
+
         return jsonify(response)
+
 
 @app.route('/rainfall', methods = ['GET', 'POST'])
 def rainfall():
